@@ -1,0 +1,8 @@
+{
+  "name": "DeskProX Helpdesk",
+  "description": "A robust helpdesk system featuring Admin, PIC, and Client roles with integrated AI for ticket summarization and smart suggestions.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
