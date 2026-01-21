@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { UserRole, Ticket, User, Comment, TicketStatus, TicketPriority } from './types';
 import { MOCK_USERS, MOCK_TICKETS, MOCK_COMMENTS } from './constants';
 import { 
@@ -6,7 +7,9 @@ import {
   IconTicket, 
   IconPlus, 
   IconSparkles,
-  IconChevronDown 
+  IconChevronDown,
+  IconPaperclip,
+  IconImage
 } from './components/Icons';
 import { classifyTicket, summarizeTicket, suggestResponse } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -28,6 +31,14 @@ const Badge = ({ children, color = "gray" }: { children?: React.ReactNode, color
     </span>
   );
 };
+
+// Image Viewer Overlay
+const ImageViewer = ({ src, onClose }: { src: string, onClose: () => void }) => (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-10 animate-in fade-in duration-200" onClick={onClose}>
+    <button onClick={onClose} className="absolute top-6 right-6 text-white text-3xl hover:text-slate-300 transition-colors">&times;</button>
+    <img src={src} className="max-w-full max-h-full object-contain shadow-2xl animate-in zoom-in-95 duration-300" alt="Full view" />
+  </div>
+);
 
 // --- Login Component ---
 
@@ -118,6 +129,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets'>('dashboard');
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
 
   // Filter tickets based on role
   const filteredTickets = useMemo(() => {
@@ -160,13 +172,14 @@ const App: React.FC = () => {
     setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, assignedTo: picId, updatedAt: new Date().toISOString() } : t));
   };
 
-  const handleAddComment = (ticketId: string, content: string) => {
+  const handleAddComment = (ticketId: string, content: string, images?: string[]) => {
     if (!currentUser) return;
     const newComment: Comment = {
       id: `c-${Date.now()}`,
       ticketId,
       userId: currentUser.id,
       content,
+      images,
       createdAt: new Date().toISOString()
     };
     setComments([...comments, newComment]);
@@ -272,6 +285,7 @@ const App: React.FC = () => {
                     onAddComment={handleAddComment}
                     onUpdateStatus={handleUpdateStatus}
                     onAssign={handleAssign}
+                    onViewImage={setViewerImage}
                     users={MOCK_USERS}
                   />
                 </div>
@@ -288,6 +302,11 @@ const App: React.FC = () => {
           onSubmit={handleAddTicket} 
           creatorId={currentUser.id} 
         />
+      )}
+
+      {/* Fullscreen Image Viewer */}
+      {viewerImage && (
+        <ImageViewer src={viewerImage} onClose={() => setViewerImage(null)} />
       )}
     </div>
   );
@@ -374,7 +393,10 @@ const DashboardView = ({ tickets, currentUser, onSelectTicket }: { tickets: Tick
                   </Badge>
                 </div>
                 <h4 className="text-sm font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{t.title}</h4>
-                <p className="text-xs text-slate-400 mt-1">{new Date(t.createdAt).toLocaleDateString()}</p>
+                <div className="flex items-center gap-2 mt-1">
+                   <p className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</p>
+                   {t.images && t.images.length > 0 && <IconPaperclip className="w-3 h-3 text-indigo-400" />}
+                </div>
               </button>
             ))}
             {recentTickets.length === 0 && (
@@ -424,6 +446,11 @@ const TicketList = ({ tickets, selectedId, onSelect, compact }: { tickets: Ticke
               <div className="flex justify-between items-start mb-2">
                 <span className="text-[10px] font-mono font-black text-slate-400 tracking-tighter uppercase">{ticket.id}</span>
                 <div className="flex gap-1.5">
+                  {ticket.images && ticket.images.length > 0 && (
+                    <span className="p-1 bg-slate-100 rounded text-slate-500">
+                      <IconImage className="w-3 h-3" />
+                    </span>
+                  )}
                   <Badge color={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
                 </div>
               </div>
@@ -464,20 +491,24 @@ const TicketDetail = ({
   onAddComment, 
   onUpdateStatus, 
   onAssign,
+  onViewImage,
   users 
 }: { 
   ticket: Ticket, 
   comments: Comment[], 
   currentUser: User, 
-  onAddComment: (tid: string, c: string) => void,
+  onAddComment: (tid: string, c: string, imgs?: string[]) => void,
   onUpdateStatus: (tid: string, s: TicketStatus) => void,
   onAssign: (tid: string, uid: string) => void,
+  onViewImage: (src: string) => void,
   users: User[]
 }) => {
   const [newComment, setNewComment] = useState('');
+  const [commentImages, setCommentImages] = useState<string[]>([]);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [suggestedReply, setSuggestedReply] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAiAction = async (type: 'summarize' | 'suggest') => {
     setIsAiLoading(true);
@@ -496,6 +527,17 @@ const TicketDetail = ({
       setNewComment(suggestedReply);
       setSuggestedReply(null);
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCommentImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const creator = users.find(u => u.id === ticket.creatorId);
@@ -563,7 +605,20 @@ const TicketDetail = ({
         {/* Issue Description */}
         <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 italic text-slate-700 leading-relaxed relative">
            <span className="absolute -top-3 left-6 bg-slate-50 px-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Initial Report</span>
-           {ticket.description}
+           <p className="mb-4">{ticket.description}</p>
+           {ticket.images && ticket.images.length > 0 && (
+             <div className="flex flex-wrap gap-2 pt-2">
+               {ticket.images.map((img, i) => (
+                 <img 
+                    key={i} 
+                    src={img} 
+                    onClick={() => onViewImage(img)}
+                    className="w-20 h-20 object-cover rounded-lg border border-slate-200 hover:scale-105 transition-transform cursor-zoom-in" 
+                    alt="Report" 
+                 />
+               ))}
+             </div>
+           )}
         </div>
 
         {/* AI Insight Section */}
@@ -636,6 +691,19 @@ const TicketDetail = ({
                     <span className="text-[9px] opacity-60">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <p className="text-sm leading-relaxed">{c.content}</p>
+                  {c.images && c.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {c.images.map((img, idx) => (
+                        <img 
+                          key={idx} 
+                          src={img} 
+                          onClick={() => onViewImage(img)}
+                          className={`w-24 h-24 object-cover rounded-lg border shadow-sm cursor-zoom-in hover:brightness-110 transition-all ${isMe ? 'border-indigo-400' : 'border-slate-200'}`} 
+                          alt="Attachment" 
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -645,16 +713,47 @@ const TicketDetail = ({
 
       {/* Footer / Input */}
       <div className="p-4 border-t border-slate-100 bg-white">
+        {commentImages.length > 0 && (
+          <div className="flex gap-2 mb-3 px-2 overflow-x-auto py-2">
+            {commentImages.map((img, i) => (
+              <div key={i} className="relative flex-shrink-0 group">
+                <img src={img} className="w-16 h-16 object-cover rounded-lg border border-slate-200" alt="Preview" />
+                <button 
+                  onClick={() => setCommentImages(prev => prev.filter((_, idx) => idx !== i))}
+                  className="absolute -top-2 -right-2 bg-rose-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <form 
           onSubmit={(e) => {
             e.preventDefault();
-            if (newComment.trim()) {
-              onAddComment(ticket.id, newComment);
+            if (newComment.trim() || commentImages.length > 0) {
+              onAddComment(ticket.id, newComment, commentImages);
               setNewComment('');
+              setCommentImages([]);
             }
           }}
           className="flex gap-2"
         >
+          <input 
+            type="file" 
+            className="hidden" 
+            ref={fileInputRef} 
+            multiple 
+            accept="image/*" 
+            onChange={handleFileChange}
+          />
+          <button 
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-3 rounded-xl border border-slate-200 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+          >
+            <IconPaperclip />
+          </button>
           <input 
             type="text" 
             value={newComment}
@@ -679,12 +778,25 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Other');
   const [priority, setPriority] = useState<TicketPriority>(TicketPriority.MEDIUM);
+  const [images, setImages] = useState<string[]>([]);
   const [isAiClassifying, setIsAiClassifying] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   const handleAiAutoFill = async () => {
     if (!title || !description) return;
     setIsAiClassifying(true);
-    const classification = await classifyTicket(title, description);
+    const classification = await classifyTicket(title, description, images);
     if (classification) {
       if (classification.category) setCategory(classification.category);
       if (classification.priority) setPriority(classification.priority as TicketPriority);
@@ -702,6 +814,7 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
       priority,
       category,
       creatorId,
+      images,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -715,8 +828,8 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
           <h2 className="text-xl font-bold">Submit New Ticket</h2>
           <button onClick={onClose} className="p-2 hover:bg-indigo-900 rounded-lg transition-colors text-2xl leading-none">&times;</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto px-1 custom-scrollbar">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Ticket Subject</label>
               <input 
@@ -733,11 +846,40 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
                 required
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={4}
+                rows={3}
                 placeholder="Provide steps to reproduce, error codes, etc."
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm shadow-sm"
               />
             </div>
+
+            {/* Image Upload Area */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Visual Evidence (Optional)</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {images.map((img, i) => (
+                  <div key={i} className="relative group">
+                    <img src={img} className="w-16 h-16 object-cover rounded-lg border border-slate-200" alt="Preview" />
+                    <button 
+                      type="button"
+                      onClick={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs shadow-lg"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+                <button 
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition-all bg-slate-50"
+                >
+                  <IconPlus className="w-5 h-5" />
+                  <span className="text-[10px] font-bold">Add</span>
+                </button>
+                <input type="file" hidden ref={fileInputRef} multiple accept="image/*" onChange={handleFileChange} />
+              </div>
+            </div>
+
             <div className="flex gap-4">
               <div className="flex-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Category</label>
@@ -762,7 +904,7 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
             </div>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 border-t border-slate-100">
              <button 
               type="button"
               disabled={isAiClassifying || !title || !description}
@@ -770,7 +912,7 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
               className="w-full mb-3 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-indigo-100 text-indigo-600 text-sm font-bold hover:bg-indigo-50 transition-colors disabled:opacity-50"
             >
               <IconSparkles className="w-4 h-4" />
-              {isAiClassifying ? 'Analyzing...' : 'Auto-classify with Gemini'}
+              {isAiClassifying ? 'Vision AI Analyzing...' : 'Auto-classify (supports images)'}
             </button>
             <div className="flex gap-3">
               <button 

@@ -34,6 +34,7 @@ export interface Comment {
   content: string;
   createdAt: string;
   isAI?: boolean;
+  images?: string[]; // Array of base64 strings
 }
 
 export interface Ticket {
@@ -47,6 +48,7 @@ export interface Ticket {
   assignedTo?: string; // User ID of PIC
   createdAt: string;
   updatedAt: string;
+  images?: string[]; // Array of base64 strings
 }
 
 export interface AppState {

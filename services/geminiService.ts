@@ -56,20 +56,38 @@ export const suggestResponse = async (ticket: Ticket, comments: Comment[]) => {
   }
 };
 
-export const classifyTicket = async (title: string, description: string) => {
-  const prompt = `
-    Classify the following helpdesk ticket title and description into one of these categories:
-    Hardware, Software, Bug, Access, Network, Other.
-    Also provide a priority recommendation: LOW, MEDIUM, HIGH, URGENT.
+export const classifyTicket = async (title: string, description: string, images?: string[]) => {
+  const textPart = {
+    text: `
+      Classify the following helpdesk ticket title and description into one of these categories:
+      Hardware, Software, Bug, Access, Network, Other.
+      Also provide a priority recommendation: LOW, MEDIUM, HIGH, URGENT.
+      If images are provided, use them to confirm the category (e.g., a photo of a broken screen is Hardware).
 
-    Title: ${title}
-    Description: ${description}
-  `;
+      Title: ${title}
+      Description: ${description}
+    `
+  };
+
+  const parts: any[] = [textPart];
+  
+  if (images && images.length > 0) {
+    images.forEach(imgBase64 => {
+      // Remove data:image/...;base64, prefix if present
+      const cleanBase64 = imgBase64.includes(',') ? imgBase64.split(',')[1] : imgBase64;
+      parts.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: "image/jpeg" // Assumption for demo
+        }
+      });
+    });
+  }
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: prompt,
+      contents: { parts },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -83,7 +101,6 @@ export const classifyTicket = async (title: string, description: string) => {
         }
       }
     });
-    // Ensure response text is trimmed before JSON parsing
     return JSON.parse(response.text.trim());
   } catch (error) {
     console.error("Gemini Classification Error:", error);
