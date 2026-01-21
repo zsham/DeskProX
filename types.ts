@@ -25,6 +25,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  phone?: string; // Added for WhatsApp integration
 }
 
 export interface Comment {
@@ -34,7 +35,7 @@ export interface Comment {
   content: string;
   createdAt: string;
   isAI?: boolean;
-  images?: string[]; // Array of base64 strings
+  images?: string[];
 }
 
 export interface Ticket {
@@ -45,10 +46,21 @@ export interface Ticket {
   priority: TicketPriority;
   category: string;
   creatorId: string;
-  assignedTo?: string; // User ID of PIC
+  assignedTo?: string;
   createdAt: string;
   updatedAt: string;
-  images?: string[]; // Array of base64 strings
+  images?: string[];
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  ticketId?: string;
+  type: 'info' | 'success' | 'warning' | 'urgent';
 }
 
 export interface AppState {
@@ -56,4 +68,5 @@ export interface AppState {
   tickets: Ticket[];
   users: User[];
   comments: Comment[];
+  notifications: Notification[];
 }

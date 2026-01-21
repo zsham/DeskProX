@@ -2,10 +2,10 @@
 import { User, UserRole, Ticket, TicketStatus, TicketPriority, Comment } from './types';
 
 export const MOCK_USERS: User[] = [
-  { id: 'u1', name: 'Alice Admin', email: 'alice@admin.com', role: UserRole.ADMIN, avatar: 'https://picsum.photos/seed/alice/100/100' },
-  { id: 'u2', name: 'Bob Tech', email: 'bob@pic.com', role: UserRole.PIC, avatar: 'https://picsum.photos/seed/bob/100/100' },
-  { id: 'u3', name: 'Charlie Client', email: 'charlie@client.com', role: UserRole.CLIENT, avatar: 'https://picsum.photos/seed/charlie/100/100' },
-  { id: 'u4', name: 'Diana Tech', email: 'diana@pic.com', role: UserRole.PIC, avatar: 'https://picsum.photos/seed/diana/100/100' },
+  { id: 'u1', name: 'Alice Admin', email: 'alice@admin.com', role: UserRole.ADMIN, avatar: 'https://picsum.photos/seed/alice/100/100', phone: '6281234567890' },
+  { id: 'u2', name: 'Bob Tech', email: 'bob@pic.com', role: UserRole.PIC, avatar: 'https://picsum.photos/seed/bob/100/100', phone: '6281234567891' },
+  { id: 'u3', name: 'Charlie Client', email: 'charlie@client.com', role: UserRole.CLIENT, avatar: 'https://picsum.photos/seed/charlie/100/100', phone: '6281234567892' },
+  { id: 'u4', name: 'Diana Tech', email: 'diana@pic.com', role: UserRole.PIC, avatar: 'https://picsum.photos/seed/diana/100/100', phone: '6281234567893' },
 ];
 
 export const MOCK_TICKETS: Ticket[] = [
