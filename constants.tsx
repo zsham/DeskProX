@@ -22,6 +22,18 @@ export const MOCK_TICKETS: Ticket[] = [
     updatedAt: new Date().toISOString(),
   },
   {
+    id: 'T-999',
+    title: 'Forgotten Legacy Issue',
+    description: 'This ticket was opened a long time ago and never received a proper follow-up.',
+    status: TicketStatus.OPEN,
+    priority: TicketPriority.HIGH,
+    category: 'Software',
+    creatorId: 'u3',
+    assignedTo: 'u2',
+    createdAt: new Date(Date.now() - (20 * 24 * 60 * 60 * 1000)).toISOString(), // 20 days ago
+    updatedAt: new Date(Date.now() - (20 * 24 * 60 * 60 * 1000)).toISOString(),
+  },
+  {
     id: 'T-1002',
     title: 'New laptop request',
     description: 'Need a new laptop for the upcoming project. Preferred specs: 32GB RAM.',

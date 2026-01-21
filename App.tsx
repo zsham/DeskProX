@@ -214,18 +214,55 @@ const App: React.FC = () => {
 
   // Alert Trigger
   const triggerAlarm = useCallback((userId: string, title: string, message: string, ticketId?: string, type: Notification['type'] = 'info') => {
-    const newNotif: Notification = {
-      id: `n-${Date.now()}-${Math.random()}`,
-      userId,
-      title,
-      message,
-      read: false,
-      createdAt: new Date().toISOString(),
-      ticketId,
-      type
-    };
-    setNotifications(prev => [newNotif, ...prev]);
+    setNotifications(prev => {
+      // Avoid duplicate notifications for same ticket/title combo
+      const exists = prev.find(n => n.userId === userId && n.ticketId === ticketId && n.title === title);
+      if (exists) return prev;
+
+      const newNotif: Notification = {
+        id: `n-${Date.now()}-${Math.random()}`,
+        userId,
+        title,
+        message,
+        read: false,
+        createdAt: new Date().toISOString(),
+        ticketId,
+        type
+      };
+      return [newNotif, ...prev];
+    });
   }, []);
+
+  // Late Action Check (15 Days)
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser) return;
+    
+    const checkStaleTickets = () => {
+      const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
+      const now = new Date().getTime();
+
+      tickets.forEach(ticket => {
+        const isClosed = ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CLOSED;
+        if (!isClosed) {
+          const createdTime = new Date(ticket.createdAt).getTime();
+          if (now - createdTime > fifteenDaysInMs) {
+            // Trigger alert for Admin and Assigned PIC
+            const admins = MOCK_USERS.filter(u => u.role === UserRole.ADMIN);
+            admins.forEach(admin => {
+              triggerAlarm(admin.id, 'Late Action Alert', `Ticket ${ticket.id} has been open for 15+ days without resolution!`, ticket.id, 'urgent');
+            });
+            if (ticket.assignedTo) {
+              triggerAlarm(ticket.assignedTo, 'URGENT: Delayed Action', `Ticket ${ticket.id} is overdue! Please take action immediately.`, ticket.id, 'urgent');
+            }
+          }
+        }
+      });
+    };
+
+    checkStaleTickets();
+    const interval = setInterval(checkStaleTickets, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [tickets, isAuthenticated, currentUser, triggerAlarm]);
 
   // Handlers
   const handleLogin = (user: User) => {
@@ -425,9 +462,20 @@ const TicketList = ({ tickets, selectedId, onSelect, compact }: { tickets: Ticke
       <div className="divide-y divide-slate-100 max-h-[70vh] overflow-y-auto custom-scrollbar">
         {tickets.map(ticket => {
           const isSelected = selectedId === ticket.id;
+          const isLate = (new Date().getTime() - new Date(ticket.createdAt).getTime()) > 15 * 24 * 60 * 60 * 1000;
+          const isDone = ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CLOSED;
+
           return (
             <button key={ticket.id} onClick={() => onSelect(ticket.id)} className={`w-full text-left p-4 transition-all hover:bg-slate-50 ${isSelected ? 'bg-indigo-50/50 border-r-4 border-indigo-600 shadow-inner' : ''}`}>
-              <div className="flex justify-between items-start mb-2"><span className="text-[10px] font-mono font-black text-slate-400 tracking-tighter uppercase">{ticket.id}</span><div className="flex gap-1.5">{ticket.images && ticket.images.length > 0 && (<span className="p-1 bg-slate-100 rounded text-slate-500"><IconImage className="w-3 h-3" /></span>)}<Badge color={ticket.priority === TicketPriority.URGENT ? 'red' : ticket.priority === TicketPriority.HIGH ? 'yellow' : 'gray'}>{ticket.priority}</Badge></div></div>
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-black text-slate-400 tracking-tighter uppercase">{ticket.id}</span>
+                  {isLate && !isDone && (
+                    <span className="bg-rose-100 text-rose-600 text-[9px] font-black px-1.5 py-0.5 rounded border border-rose-200 animate-pulse uppercase tracking-widest">Late Action</span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">{ticket.images && ticket.images.length > 0 && (<span className="p-1 bg-slate-100 rounded text-slate-500"><IconImage className="w-3 h-3" /></span>)}<Badge color={ticket.priority === TicketPriority.URGENT ? 'red' : ticket.priority === TicketPriority.HIGH ? 'yellow' : 'gray'}>{ticket.priority}</Badge></div>
+              </div>
               <h4 className={`text-sm font-bold mb-2 leading-tight ${isSelected ? 'text-indigo-900' : 'text-slate-800'}`}>{ticket.title}</h4>
               <div className="flex items-center justify-between mt-auto">
                 <div className="flex items-center gap-2"><Badge color={ticket.status === TicketStatus.OPEN ? 'blue' : ticket.status === TicketStatus.RESOLVED ? 'green' : 'yellow'}>{ticket.status.replace('_', ' ')}</Badge><span className="text-[10px] text-slate-400 font-medium">#{ticket.category}</span></div>
