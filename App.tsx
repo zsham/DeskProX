@@ -10,7 +10,8 @@ import {
   IconPaperclip,
   IconImage,
   IconBell,
-  IconWhatsapp
+  IconWhatsapp,
+  IconHelpdesk
 } from './components/Icons';
 import { classifyTicket, summarizeTicket, suggestResponse } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -136,7 +137,7 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
       <div className="max-w-md w-full bg-white/10 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/20 shadow-2xl animate-in fade-in zoom-in duration-500">
         <div className="text-center mb-10">
           <div className="inline-flex p-3 bg-indigo-600 rounded-2xl shadow-lg mb-4">
-            <IconSparkles className="text-white w-8 h-8" />
+            <IconHelpdesk className="text-white w-8 h-8" />
           </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">DeskProX</h1>
           <p className="text-indigo-200 mt-2">Intelligent Helpdesk System</p>
@@ -330,7 +331,7 @@ const App: React.FC = () => {
     <div className="flex h-screen overflow-hidden bg-slate-50 animate-in fade-in duration-700">
       <aside className="w-64 bg-indigo-950 text-white flex flex-col">
         <div className="p-6 border-b border-indigo-900 flex items-center gap-3">
-          <div className="bg-white p-1.5 rounded-lg shadow-xl shadow-indigo-600/20"><IconSparkles className="text-indigo-600" /></div>
+          <div className="bg-white p-1.5 rounded-lg shadow-xl shadow-indigo-600/20"><IconHelpdesk className="text-indigo-600" /></div>
           <h1 className="font-bold text-xl tracking-tight">DeskProX</h1>
         </div>
         
