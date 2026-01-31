@@ -5,6 +5,7 @@ import { Ticket, Comment } from "../types";
 // Always use process.env.API_KEY directly as per guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// Fix: Using gemini-3-flash-preview for basic summarization task
 export const summarizeTicket = async (ticket: Ticket, comments: Comment[]) => {
   const commentText = comments.map(c => `${c.userId}: ${c.content}`).join('\n');
   const prompt = `
@@ -25,13 +26,15 @@ export const summarizeTicket = async (ticket: Ticket, comments: Comment[]) => {
         thinkingConfig: { thinkingBudget: 0 }
       }
     });
-    return response.text;
+    // Fix: Handle potential undefined response.text
+    return response.text || "Summary not available.";
   } catch (error) {
     console.error("Gemini Summarization Error:", error);
     return "Could not generate summary at this time.";
   }
 };
 
+// Fix: Using gemini-3-flash-preview for response suggestion
 export const suggestResponse = async (ticket: Ticket, comments: Comment[]) => {
   const lastUserComment = [...comments].reverse().find(c => c.userId === ticket.creatorId);
   const prompt = `
@@ -49,13 +52,15 @@ export const suggestResponse = async (ticket: Ticket, comments: Comment[]) => {
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text;
+    // Fix: Handle potential undefined response.text
+    return response.text || "I recommend looking into the reported issue further before responding.";
   } catch (error) {
     console.error("Gemini Suggestion Error:", error);
     return "I recommend looking into the reported issue further before responding.";
   }
 };
 
+// Fix: Using gemini-3-pro-preview for complex classification and reasoning with vision support
 export const classifyTicket = async (title: string, description: string, images?: string[]) => {
   const textPart = {
     text: `
@@ -78,7 +83,7 @@ export const classifyTicket = async (title: string, description: string, images?
       parts.push({
         inlineData: {
           data: cleanBase64,
-          mimeType: "image/jpeg" // Assumption for demo
+          mimeType: "image/jpeg" 
         }
       });
     });
@@ -86,7 +91,7 @@ export const classifyTicket = async (title: string, description: string, images?
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: { parts },
       config: {
         responseMimeType: "application/json",
@@ -101,7 +106,11 @@ export const classifyTicket = async (title: string, description: string, images?
         }
       }
     });
-    return JSON.parse(response.text.trim());
+    
+    // Fix: Handle potential undefined response.text and trim safely
+    const text = response.text;
+    if (!text) return { category: 'Other', priority: 'MEDIUM' };
+    return JSON.parse(text.trim());
   } catch (error) {
     console.error("Gemini Classification Error:", error);
     return { category: 'Other', priority: 'MEDIUM' };

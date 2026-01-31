@@ -41,6 +41,29 @@ const ImageViewer = ({ src, onClose }: { src: string, onClose: () => void }) => 
   </div>
 );
 
+// Email Toast Notification Component
+const EmailToast = ({ message, onClear }: { message: string, onClear: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClear, 4000);
+    return () => clearTimeout(timer);
+  }, [onClear]);
+
+  return (
+    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[110] bg-slate-900/90 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-4 animate-in slide-in-from-top-4 duration-300">
+      <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center shrink-0">
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <div>
+        <p className="text-xs font-black text-indigo-400 uppercase tracking-widest">Email Dispatched</p>
+        <p className="text-sm font-medium text-slate-200">{message}</p>
+      </div>
+      <button onClick={onClear} className="ml-4 text-slate-500 hover:text-white">&times;</button>
+    </div>
+  );
+};
+
 // WhatsApp Floating Button for Client
 const FloatingWhatsapp = ({ adminPhone }: { adminPhone?: string }) => {
   if (!adminPhone) return null;
@@ -100,8 +123,15 @@ const NotificationPanel = ({
                   n.type === 'success' ? 'bg-emerald-500' : 
                   n.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
                 }`}></div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800 leading-tight">{n.title}</p>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <p className="text-xs font-bold text-slate-800 leading-tight">{n.title}</p>
+                    {n.title.toLowerCase().includes('email') && (
+                      <svg className="w-3 h-3 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v10a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </div>
                   <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{n.message}</p>
                   <p className="text-[9px] text-slate-400 mt-2">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
@@ -192,6 +222,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [emailToast, setEmailToast] = useState<string | null>(null);
 
   // Admin phone for helpdesk support
   const helpdeskPhone = MOCK_USERS.find(u => u.role === UserRole.ADMIN)?.phone;
@@ -213,8 +244,11 @@ const App: React.FC = () => {
   const selectedTicket = useMemo(() => tickets.find(t => t.id === selectedTicketId), [tickets, selectedTicketId]);
   const ticketComments = useMemo(() => comments.filter(c => c.ticketId === selectedTicketId), [comments, selectedTicketId]);
 
-  // Alert Trigger
-  const triggerAlarm = useCallback((userId: string, title: string, message: string, ticketId?: string, type: Notification['type'] = 'info') => {
+  // Alert Trigger with Email Simulation
+  const triggerAlarm = useCallback((userId: string, title: string, message: string, ticketId?: string, type: Notification['type'] = 'info', simulateEmail: boolean = false) => {
+    const user = MOCK_USERS.find(u => u.id === userId);
+    if (!user) return;
+
     setNotifications(prev => {
       // Avoid duplicate notifications for same ticket/title combo
       const exists = prev.find(n => n.userId === userId && n.ticketId === ticketId && n.title === title);
@@ -223,13 +257,18 @@ const App: React.FC = () => {
       const newNotif: Notification = {
         id: `n-${Date.now()}-${Math.random()}`,
         userId,
-        title,
-        message,
+        title: simulateEmail ? `[Email] ${title}` : title,
+        message: simulateEmail ? `An email notification was sent to ${user.email}: ${message}` : message,
         read: false,
         createdAt: new Date().toISOString(),
         ticketId,
         type
       };
+      
+      if (simulateEmail) {
+        setEmailToast(`Notification sent to ${user.email}`);
+      }
+
       return [newNotif, ...prev];
     });
   }, []);
@@ -250,10 +289,10 @@ const App: React.FC = () => {
             // Trigger alert for Admin and Assigned PIC
             const admins = MOCK_USERS.filter(u => u.role === UserRole.ADMIN);
             admins.forEach(admin => {
-              triggerAlarm(admin.id, 'Late Action Alert', `Ticket ${ticket.id} has been open for 15+ days without resolution!`, ticket.id, 'urgent');
+              triggerAlarm(admin.id, 'Late Action Alert', `Ticket ${ticket.id} has been open for 15+ days without resolution!`, ticket.id, 'urgent', true);
             });
             if (ticket.assignedTo) {
-              triggerAlarm(ticket.assignedTo, 'URGENT: Delayed Action', `Ticket ${ticket.id} is overdue! Please take action immediately.`, ticket.id, 'urgent');
+              triggerAlarm(ticket.assignedTo, 'URGENT: Delayed Action', `Ticket ${ticket.id} is overdue! Please take action immediately.`, ticket.id, 'urgent', true);
             }
           }
         }
@@ -281,25 +320,34 @@ const App: React.FC = () => {
   const handleAddTicket = (newTicket: Ticket) => {
     setTickets([newTicket, ...tickets]);
     setIsModalOpen(false);
-    // Notify Admin of new ticket
+    
+    // Email to Client confirming receipt
+    triggerAlarm(newTicket.creatorId, 'Ticket Received', `We have received your ticket: ${newTicket.title}. Support will review it shortly.`, newTicket.id, 'success', true);
+
+    // Notify Admin of new ticket via email
     const admins = MOCK_USERS.filter(u => u.role === UserRole.ADMIN);
-    admins.forEach(admin => triggerAlarm(admin.id, 'New Ticket Created', `Client submitted: ${newTicket.title}`, newTicket.id, newTicket.priority === TicketPriority.URGENT ? 'urgent' : 'info'));
+    admins.forEach(admin => triggerAlarm(admin.id, 'New Ticket Created', `Client submitted: ${newTicket.title}`, newTicket.id, newTicket.priority === TicketPriority.URGENT ? 'urgent' : 'info', true));
   };
 
   const handleUpdateStatus = (ticketId: string, status: TicketStatus) => {
     setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status, updatedAt: new Date().toISOString() } : t));
     const ticket = tickets.find(t => t.id === ticketId);
     if (ticket) {
-      // Notify Client of status update
-      triggerAlarm(ticket.creatorId, 'Ticket Status Updated', `${ticket.id} is now ${status.replace('_', ' ')}`, ticketId, 'success');
+      // Notify Client of status update via email
+      triggerAlarm(ticket.creatorId, 'Ticket Status Updated', `The status of ${ticket.id} has changed to ${status.replace('_', ' ')}`, ticketId, 'success', true);
+      
+      // If PIC is assigned, notify them too
+      if (ticket.assignedTo) {
+        triggerAlarm(ticket.assignedTo, 'Ticket Status Changed', `You updated ${ticket.id} to ${status.replace('_', ' ')}`, ticketId, 'info', true);
+      }
     }
   };
 
   const handleAssign = (ticketId: string, picId: string) => {
     setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, assignedTo: picId, updatedAt: new Date().toISOString() } : t));
-    // Notify PIC
+    // Notify PIC via email
     const pic = MOCK_USERS.find(u => u.id === picId);
-    if (pic) triggerAlarm(picId, 'New Assignment', `You have been assigned to ${ticketId}`, ticketId, 'warning');
+    if (pic) triggerAlarm(picId, 'New Assignment', `You have been assigned to handle ticket ${ticketId}`, ticketId, 'warning', true);
   };
 
   const handleAddComment = (ticketId: string, content: string, images?: string[]) => {
@@ -318,7 +366,7 @@ const App: React.FC = () => {
     if (ticket) {
       const recipientId = currentUser.role === UserRole.CLIENT ? ticket.assignedTo : ticket.creatorId;
       if (recipientId) {
-        triggerAlarm(recipientId, 'New Message', `${currentUser.name} replied to ${ticketId}`, ticketId, 'info');
+        triggerAlarm(recipientId, 'New Message Received', `${currentUser.name} has replied to ticket ${ticketId}`, ticketId, 'info', true);
       }
     }
   };
@@ -329,6 +377,9 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 animate-in fade-in duration-700">
+      {/* Global Email Toast */}
+      {emailToast && <EmailToast message={emailToast} onClear={() => setEmailToast(null)} />}
+
       <aside className="w-64 bg-indigo-950 text-white flex flex-col">
         <div className="p-6 border-b border-indigo-900 flex items-center gap-3">
           <div className="bg-white p-1.5 rounded-lg shadow-xl shadow-indigo-600/20"><IconHelpdesk className="text-indigo-600" /></div>
@@ -496,13 +547,42 @@ const TicketDetail = ({ ticket, comments, currentUser, onAddComment, onUpdateSta
   const [isAiLoading, setIsAiLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Fix: Explicitly type 'files' as File[] to resolve 'unknown' to 'Blob' error
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach(file => {
+    const files = Array.from(e.target.files || []) as File[];
+    files.forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = () => setCommentImages(prev => [...prev, reader.result as string]);
       reader.readAsDataURL(file);
     });
+  };
+
+  // Fix: Implement AI Summarization feature
+  const handleAiSummarize = async () => {
+    if (isAiLoading) return;
+    setIsAiLoading(true);
+    try {
+      const summary = await summarizeTicket(ticket, comments);
+      if (summary) {
+        onAddComment(ticket.id, `🤖 **AI Ticket Summary:**\n${summary}`, []);
+      }
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // Fix: Implement AI Suggest Response feature
+  const handleAiSuggest = async () => {
+    if (isAiLoading) return;
+    setIsAiLoading(true);
+    try {
+      const suggestion = await suggestResponse(ticket, comments);
+      if (suggestion) {
+        setNewComment(suggestion);
+      }
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   const creator = users.find(u => u.id === ticket.creatorId);
@@ -520,6 +600,17 @@ const TicketDetail = ({ ticket, comments, currentUser, onAddComment, onUpdateSta
         <div className="flex justify-between items-start mb-4">
           <div><div className="flex items-center gap-2 mb-1"><span className="text-xs font-mono font-bold text-indigo-500 uppercase tracking-widest">{ticket.id}</span><span className="text-slate-300">•</span><span className="text-xs text-slate-500 font-medium">Reported by {creator?.name}</span></div><h3 className="text-2xl font-extrabold text-slate-800 tracking-tight">{ticket.title}</h3></div>
           <div className="flex gap-2">
+            {/* Fix: Added AI Summarize Button for PIC/Admin */}
+            {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PIC) && (
+              <button 
+                onClick={handleAiSummarize}
+                disabled={isAiLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-100 transition-all disabled:opacity-50"
+              >
+                <IconSparkles className="w-3.5 h-3.5" />
+                {isAiLoading ? 'Analyzing...' : 'Summarize'}
+              </button>
+            )}
             {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PIC) && (
               <select value={ticket.status} onChange={(e) => onUpdateStatus(ticket.id, e.target.value as TicketStatus)} className="text-xs font-bold border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer shadow-sm">
                 {Object.values(TicketStatus).map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
@@ -567,7 +658,7 @@ const TicketDetail = ({ ticket, comments, currentUser, onAddComment, onUpdateSta
                 <img src={commenter?.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm mt-1" alt="" />
                 <div className={`max-w-[80%] rounded-2xl p-4 shadow-sm ${isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-50 text-slate-700 rounded-tl-none border border-slate-100'}`}>
                   <div className={`flex items-center gap-2 mb-1 ${isMe ? 'justify-end' : ''}`}><span className="text-[10px] font-bold opacity-80">{commenter?.name}</span><span className="text-[9px] opacity-60">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-                  <p className="text-sm leading-relaxed">{c.content}</p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{c.content}</p>
                   {c.images && c.images.length > 0 && (<div className="flex flex-wrap gap-2 mt-3">{c.images.map((img, idx) => (<img key={idx} src={img} onClick={() => onViewImage(img)} className={`w-24 h-24 object-cover rounded-lg border shadow-sm cursor-zoom-in hover:brightness-110 transition-all ${isMe ? 'border-indigo-400' : 'border-slate-200'}`} alt="" />))}</div>)}
                 </div>
               </div>
@@ -581,6 +672,18 @@ const TicketDetail = ({ ticket, comments, currentUser, onAddComment, onUpdateSta
         <form onSubmit={(e) => { e.preventDefault(); if (newComment.trim() || commentImages.length > 0) { onAddComment(ticket.id, newComment, commentImages); setNewComment(''); setCommentImages([]); }}} className="flex gap-2">
           <input type="file" className="hidden" ref={fileInputRef} multiple accept="image/*" onChange={handleFileChange} />
           <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 rounded-xl border border-slate-200 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"><IconPaperclip /></button>
+          {/* Fix: Added AI Suggest Reply Button for PIC/Admin */}
+          {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.PIC) && (
+            <button 
+              type="button" 
+              onClick={handleAiSuggest}
+              disabled={isAiLoading}
+              title="AI Suggest Reply"
+              className="p-3 rounded-xl border border-indigo-100 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+            >
+              <IconSparkles className="w-5 h-5" />
+            </button>
+          )}
           <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Write a message..." className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm shadow-inner" />
           <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95">Send</button>
         </form>
@@ -598,9 +701,10 @@ const NewTicketModal = ({ onClose, onSubmit, creatorId }: { onClose: () => void,
   const [isAiClassifying, setIsAiClassifying] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Fix: Explicitly type 'files' as File[] to resolve 'unknown' to 'Blob' error
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach(file => {
+    const files = Array.from(e.target.files || []) as File[];
+    files.forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = () => setImages(prev => [...prev, reader.result as string]);
       reader.readAsDataURL(file);
